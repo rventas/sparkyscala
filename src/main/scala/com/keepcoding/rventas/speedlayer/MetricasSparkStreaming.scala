@@ -112,6 +112,9 @@ object MetricasSparkStreaming {
     //tiempo y si se producen transacciones en distintas ciudades mostrar una alerta
     val operacionesClienteCiudad = streamTransformado.map(tupla => ((tupla._2.geolocalizacion.ciudad, tupla._1.DNI),1))
       .reduceByKey(_+_)
+    operacionesClienteCiudad.foreachRDD(rdd => {
+      rdd.saveAsTextFile("/home/keepcoding/KeepCoding/Workspace/PracticaRaquel/datasetOutput/metricaAdicional2")
+    })
 
     //Definición de la configuración del tópico de salida de Kafka
     val salidaMetrica1 = args(1)
@@ -133,22 +136,12 @@ object MetricasSparkStreaming {
       rdd.foreachPartition(writeToKafka(salidaMetrica4))
     })
 
-    operacionesClienteCiudad.foreachRDD(rdd => {
-      rdd.foreachPartition(writeToKafkaFraude("salidaFraude"))
-    })
     ssc.start()
     ssc.awaitTermination()
 
   }
 
   def writeToKafka (outputTopic: String)(partitionOfRecords: Iterator[(Cliente, Transaccion)]): Unit = {
-    val producer = new KafkaProducer[String, String](getKafkaConfig())
-    partitionOfRecords.foreach(data => producer.send(new ProducerRecord[String, String](outputTopic, data.toString())))
-    producer.flush()
-    producer.close()
-  }
-
-  def writeToKafkaFraude (outputTopic: String)(partitionOfRecords: Iterator[((String, String), Int)]): Unit = {
     val producer = new KafkaProducer[String, String](getKafkaConfig())
     partitionOfRecords.foreach(data => producer.send(new ProducerRecord[String, String](outputTopic, data.toString())))
     producer.flush()
