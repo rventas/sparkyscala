@@ -13,3 +13,4 @@
 	5. ultimasTransacciones
 	6. clientesConSaldoNegativo
 
+  El primer argumento es el tópico producer de kafka y el resto son los tópicos consumer para cada una de las métricas

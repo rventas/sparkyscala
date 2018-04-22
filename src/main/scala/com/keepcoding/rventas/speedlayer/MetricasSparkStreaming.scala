@@ -69,7 +69,6 @@ object MetricasSparkStreaming {
 
     //1. Agrupar todos los clientes por ciudad. El objetivo es contar todas las transacciones por ciudad.
     // Convert RDDs of the DStream to DataFrame and run SQL query
-
     streamTransformado.foreachRDD(foreachFunc = rdd => {
 
       val spark = SparkSession.builder().config(rdd.sparkContext.getConf).getOrCreate()
@@ -109,15 +108,10 @@ object MetricasSparkStreaming {
       rdd.saveAsTextFile("/home/keepcoding/KeepCoding/Workspace/PracticaRaquel/datasetOutput/metricaAdicional1")
     })
 
-    //Metrica adicional 2: Numero de transacciones echas con tarjetas "Visa"
-    val operacionesVisa: DStream[Long] = streamTransformado.filter(tupla => tupla._2.tarjetaCredito.equals("Visa")).count()
-    operacionesVisa.foreachRDD(rdd => {
-      rdd.foreach(num => {
-        //Esto no me funciona, cuando lo descomento me salta una excepcion
-        //rdd.saveAsTextFile("/home/keepcoding/KeepCoding/Workspace/PracticaRaquel/datasetOutput/metricaAdicional2")
-        println ("Operaciones con tarjetas visa cada 5 segundos: " + num)
-      })
-    })
+    //Metrica adicional 2: Detección de fraude. Contar las transacciones por ciudad de un cliente en un intervalo de
+    //tiempo y si se producen transacciones en distintas ciudades mostrar una alerta
+    val operacionesClienteCiudad = streamTransformado.map(tupla => ((tupla._2.geolocalizacion.ciudad, tupla._1.DNI),1))
+      .reduceByKey(_+_)
 
     //Definición de la configuración del tópico de salida de Kafka
     val salidaMetrica1 = args(1)
@@ -139,12 +133,22 @@ object MetricasSparkStreaming {
       rdd.foreachPartition(writeToKafka(salidaMetrica4))
     })
 
+    operacionesClienteCiudad.foreachRDD(rdd => {
+      rdd.foreachPartition(writeToKafkaFraude("salidaFraude"))
+    })
     ssc.start()
     ssc.awaitTermination()
 
   }
 
   def writeToKafka (outputTopic: String)(partitionOfRecords: Iterator[(Cliente, Transaccion)]): Unit = {
+    val producer = new KafkaProducer[String, String](getKafkaConfig())
+    partitionOfRecords.foreach(data => producer.send(new ProducerRecord[String, String](outputTopic, data.toString())))
+    producer.flush()
+    producer.close()
+  }
+
+  def writeToKafkaFraude (outputTopic: String)(partitionOfRecords: Iterator[((String, String), Int)]): Unit = {
     val producer = new KafkaProducer[String, String](getKafkaConfig())
     partitionOfRecords.foreach(data => producer.send(new ProducerRecord[String, String](outputTopic, data.toString())))
     producer.flush()
